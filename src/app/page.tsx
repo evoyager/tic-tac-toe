@@ -124,7 +124,7 @@ export default function GamePage() {
   };
 
   const handleClick = (i: number) => {
-    if (!gameState || gameState.winner || gameState.board[i]) {
+    if (!gameState || !gameState.board || gameState.winner || gameState.board[i]) {
       return;
     }
     const currentPlayer: Player = gameState.xIsNext ? 'X' : 'O';
@@ -170,7 +170,7 @@ export default function GamePage() {
   }
 
 
-  if (!gameId || !gameState) {
+  if (!gameId || !gameState || !gameState.board) {
     return (
       <main className="flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 font-body">
         <Card className="w-full max-w-md shadow-2xl bg-card">
@@ -252,3 +252,4 @@ export default function GamePage() {
     </main>
   );
 }
+    

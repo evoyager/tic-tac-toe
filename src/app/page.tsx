@@ -1,6 +1,6 @@
 
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ref, onValue, set, push, serverTimestamp } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import Board from '@/components/game/Board';
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 type Player = 'X' | 'O';
-type SquareValue = Player | null;
+type SquareValue = Player | "" | null;
 
 interface GameState {
   board: SquareValue[];
@@ -41,21 +41,30 @@ function calculateWinner(squares: SquareValue[]) {
   return null;
 }
 
+const initialBoard = {0:"", 1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:""};
+
 export default function GamePage() {
   const [gameId, setGameId] = useState<string>('');
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [playerId, setPlayerId] = useState<string>('');
+  const [playerId, setPlayerId] = useState<string | null>(null);
+  const playerIdRef = useRef<string | null>(null);
   const [playerSymbol, setPlayerSymbol] = useState<Player | null>(null);
   const [inputGameId, setInputGameId] = useState('');
+  const [isInitializing, setIsInitializing] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     let id = localStorage.getItem('playerId');
     if (!id) {
-      id = push(ref(db, 'players')).key;
-      localStorage.setItem('playerId', id!);
+      const playerRef = push(ref(db, 'players'));
+      id = playerRef.key;
+      if (id) {
+        localStorage.setItem('playerId', id);
+      }
     }
-    setPlayerId(id!);
+    playerIdRef.current = id;
+    setPlayerId(id);
+    setIsInitializing(false);
   }, []);
 
   useEffect(() => {
@@ -65,10 +74,15 @@ export default function GamePage() {
     const unsubscribe = onValue(gameRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        // Convert board from object to array if needed
+        if (data.board && !Array.isArray(data.board)) {
+          data.board = Object.values(data.board);
+        }
         setGameState(data);
-        if (data.players?.X === playerId) {
+        const currentId = playerIdRef.current;
+        if (data.players?.X === currentId) {
           setPlayerSymbol('X');
-        } else if (data.players?.O === playerId) {
+        } else if (data.players?.O === currentId) {
           setPlayerSymbol('O');
         }
       } else {
@@ -79,19 +93,24 @@ export default function GamePage() {
     });
 
     return () => unsubscribe();
-  }, [gameId, playerId, toast]);
+  }, [gameId, toast]);
 
   const createNewGame = () => {
+    const currentId = playerIdRef.current;
+    if (!currentId) {
+        toast({title: "Player ID not found", description: "Could not create game. Please refresh and try again.", variant: "destructive"});
+        return;
+    }
     const newGameId = push(ref(db, 'games')).key;
-    if (newGameId && playerId) {
+    if (newGameId) {
       const newGameRef = ref(db, `games/${newGameId}`);
-      const newGameState: GameState = {
-        board: Array(9).fill(null),
+      const newGameState = {
+        board: initialBoard,
         xIsNext: true,
         winner: null,
         winningLine: null,
         isDraw: false,
-        players: { X: playerId, O: null },
+        players: { X: currentId, O: null },
         createdAt: serverTimestamp(),
       };
       set(newGameRef, newGameState);
@@ -100,27 +119,28 @@ export default function GamePage() {
   };
 
   const joinGame = () => {
-    if (inputGameId && playerId) {
-        const gameRef = ref(db, `games/${inputGameId}`);
-        onValue(gameRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const gameData = snapshot.val() as GameState;
-                if(gameData.players.X && gameData.players.O && gameData.players.X !== playerId && gameData.players.O !== playerId) {
-                    toast({title: "Game Full", description: "This game already has two players.", variant: 'destructive'})
-                    return;
-                }
-                
-                if (gameData.players.X === playerId || gameData.players.O === playerId) {
-                    setGameId(inputGameId);
-                } else if (!gameData.players.O) {
-                    set(ref(db, `games/${inputGameId}/players/O`), playerId);
-                    setGameId(inputGameId);
-                }
-            } else {
-                toast({ title: "Game not found", variant: 'destructive' });
+    const currentId = playerIdRef.current;
+    if (!inputGameId || !currentId) return;
+
+    const gameRef = ref(db, `games/${inputGameId}`);
+    onValue(gameRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const gameData = snapshot.val() as GameState;
+            if(gameData.players.X && gameData.players.O && gameData.players.X !== currentId && gameData.players.O !== currentId) {
+                toast({title: "Game Full", description: "This game already has two players.", variant: 'destructive'})
+                return;
             }
-        }, { onlyOnce: true });
-    }
+            
+            if (gameData.players.X === currentId || gameData.players.O === currentId) {
+                setGameId(inputGameId);
+            } else if (!gameData.players.O) {
+                set(ref(db, `games/${inputGameId}/players/O`), currentId);
+                setGameId(inputGameId);
+            }
+        } else {
+            toast({ title: "Game not found", variant: 'destructive' });
+        }
+    }, { onlyOnce: true });
   };
 
   const handleClick = (i: number) => {
@@ -136,7 +156,7 @@ export default function GamePage() {
     const nextBoard = gameState.board.slice();
     nextBoard[i] = currentPlayer;
     const winnerInfo = calculateWinner(nextBoard);
-    const isDraw = !winnerInfo && nextBoard.every(square => square !== null);
+    const isDraw = !winnerInfo && nextBoard.every(square => square !== "" && square !== null);
 
     const nextGameState: Partial<GameState> = {
       board: nextBoard,
@@ -150,8 +170,8 @@ export default function GamePage() {
   
   const handleReset = () => {
     if(!gameState) return;
-     const newGameState: GameState = {
-        board: Array(9).fill(null),
+     const newGameState = {
+        board: initialBoard,
         xIsNext: true,
         winner: null,
         winningLine: null,
@@ -169,6 +189,13 @@ export default function GamePage() {
     setInputGameId('');
   }
 
+  if (isInitializing) {
+     return (
+       <main className="flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 font-body">
+         <p>Initializing player...</p>
+       </main>
+     )
+  }
 
   if (!gameId || !gameState || !gameState.board) {
     return (
@@ -178,14 +205,15 @@ export default function GamePage() {
             <CardTitle className="text-4xl font-bold font-headline text-primary text-center">Tic-Tac-Toe Online</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <Button onClick={createNewGame} size="lg">Create New Game</Button>
+            <Button onClick={createNewGame} size="lg" disabled={!playerId}>Create New Game</Button>
             <div className="flex items-center gap-2">
                 <Input 
                     placeholder="Enter Game ID" 
                     value={inputGameId} 
                     onChange={(e) => setInputGameId(e.target.value)}
+                    disabled={!playerId}
                 />
-                <Button onClick={joinGame}>Join Game</Button>
+                <Button onClick={joinGame} disabled={!playerId || !inputGameId}>Join Game</Button>
             </div>
           </CardContent>
         </Card>

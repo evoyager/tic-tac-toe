@@ -1,10 +1,11 @@
+
 'use client';
 import type { FC } from 'react';
 import { cn } from '@/lib/utils';
 import { IconO, IconX } from './GameIcons';
 
 type Player = 'X' | 'O';
-type SquareValue = Player | null;
+type SquareValue = Player | "" | null;
 
 type SquareProps = {
   value: SquareValue;

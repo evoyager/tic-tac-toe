@@ -1,9 +1,10 @@
+
 'use client';
 import type { FC } from 'react';
 import Square from './Square';
 
 type Player = 'X' | 'O';
-type SquareValue = Player | null;
+type SquareValue = Player | "" | null;
 
 type BoardProps = {
   squares: SquareValue[];

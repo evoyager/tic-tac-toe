@@ -6,7 +6,7 @@ import { getDatabase } from "firebase/database";
 const firebaseConfig = {
   "apiKey": "AIzaSyBnGSGhKWl1zwb9jHa04YrnYNHl1aytKEM",
   "authDomain": "studio-1326460565-b6c4b.firebaseapp.com",
-  "databaseURL": "https://studio-1326460565-b6c4b-default-rtdb.firebaseio.com",
+  "databaseURL": "https://studio-1326460565-b6c4b-default-rtdb.europe-west1.firebasedatabase.app",
   "projectId": "studio-1326460565-b6c4b",
   "appId": "1:610707782019:web:bb8d815ae4e620e1c8deb6",
   "storageBucket": "studio-1326460565-b6c4b.firebasestorage.app",

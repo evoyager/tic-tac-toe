@@ -5,7 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
   title: 'Tic-Tac-Toe',
-  description: 'A classic game with a modern twist.',
+  description: '',
 };
 
 export default function RootLayout({

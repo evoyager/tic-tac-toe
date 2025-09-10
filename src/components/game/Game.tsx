@@ -89,7 +89,7 @@ function findBestMove(squares: SquareValue[]): number {
 }
 
 const initialBoardArray: SquareValue[] = Array(9).fill('');
-const initialBoardObject: { [key: number]: SquareValue } = {0:"", 1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:""};
+const initialBoardObject: {[key: number]: SquareValue} = {0:"", 1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:""};
 
 
 // --- Main Game Component ---
@@ -132,16 +132,19 @@ export default function Game() {
     
     const gameIdFromUrl = searchParams.get('game');
     if (gameIdFromUrl) {
-        setGameMode('pvp-online');
-        setGameId(gameIdFromUrl);
-        setInputGameId(gameIdFromUrl);
-        // We need to use a timeout to ensure playerId is set before joining
-        setTimeout(() => joinGame(gameIdFromUrl), 50);
+      if (gameMode !== 'pvp-online') setGameMode('pvp-online');
+      setGameId(gameIdFromUrl);
+      setInputGameId(gameIdFromUrl);
+      // We need to use a timeout to ensure playerId is set before joining
+      setTimeout(() => joinGame(gameIdFromUrl), 50);
     } else {
-        setGameId(''); // Clear gameId if not in URL
+        if (gameId && gameMode === 'pvp-online') {
+            handleLeaveGame();
+        }
     }
     setIsInitializing(false);
-  }, [searchParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, gameMode]);
 
   // Online game state listener
   useEffect(() => {
@@ -207,7 +210,9 @@ export default function Game() {
     setGameMode(newMode);
     handleReset(); // Reset local state
     if(newMode !== 'pvp-online') {
-      router.replace('/', {scroll: false});
+        if(searchParams.get('game')) {
+          router.replace('/', {scroll: false});
+        }
       setGameId('');
       setOnlineGameState(null);
       setPlayerSymbol(null);
@@ -238,7 +243,7 @@ export default function Game() {
   };
 
   const handleClick = (i: number) => {
-    const currentBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board) : board;
+    const currentBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board || {}) : board;
     const currentWinnerInfo = calculateWinner(currentBoard);
     const currentWinner = currentWinnerInfo?.winner;
     
@@ -347,9 +352,9 @@ export default function Game() {
     const newBoardState = { ...boardState, [i]: currentPlayer };
 
     const boardAsArrayForWinnerCheck: SquareValue[] = Array(9).fill('');
-    Object.keys(newBoardState).forEach(key => {
-        const numericKey = parseInt(key, 10);
-        boardAsArrayForWinnerCheck[numericKey] = newBoardState[numericKey as keyof typeof newBoardState];
+    Object.keys(newBoardState).forEach(stringKey => {
+        const key = parseInt(stringKey, 10);
+        boardAsArrayForWinnerCheck[key] = newBoardState[key as keyof typeof newBoardState];
     })
     
     const winnerInfo = calculateWinner(boardAsArrayForWinnerCheck);
@@ -376,11 +381,11 @@ export default function Game() {
   }
 
   // --- Render Logic ---
-  const displayWinnerInfo = gameMode === 'pvp-online' && onlineGameState ? calculateWinner(Object.values(onlineGameState.board)) : winnerInfo;
+  const displayWinnerInfo = gameMode === 'pvp-online' && onlineGameState ? calculateWinner(Object.values(onlineGameState.board || {})) : winnerInfo;
   const displayWinner = displayWinnerInfo?.winner;
   const displayIsDraw = gameMode === 'pvp-online' ? onlineGameState?.isDraw : isDraw;
-  const displayXIsNext = gameMode === 'pvp-online' ? onlineGameState?.xIsNext : xIsNext;
-  const displayBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board) : board;
+  const displayXIsNext = gameMode === 'pvp-online' && onlineGameState ? onlineGameState.xIsNext : xIsNext;
+  const displayBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board || {}) : board;
   const displayWinningLine = displayWinnerInfo?.line;
 
 
@@ -456,8 +461,6 @@ export default function Game() {
                 <CardTitle className="text-4xl font-bold font-headline text-primary">
                   Tic-Tac-Toe
                 </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center gap-6 pt-2">
                 <div className='flex items-center justify-center gap-4 text-muted-foreground'>
                   <label htmlFor='game-mode-select' className='text-lg'>Game Mode</label>
                   <Select onValueChange={(value: GameMode) => handleModeChange(value)} value={gameMode}>
@@ -471,6 +474,8 @@ export default function Game() {
                     </SelectContent>
                   </Select>
                 </div>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center gap-6 pt-2">
                 <div className="flex h-10 items-center justify-center text-xl">{statusMessage}</div>
                 <Board
                   squares={displayBoard}
@@ -505,7 +510,7 @@ export default function Game() {
       </Card>
       
       <footer className="absolute bottom-4 text-center text-sm text-muted-foreground">
-        <p>A classic game with a modern twist.</p>
+        
       </footer>
     </main>
   );

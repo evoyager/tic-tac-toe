@@ -48,6 +48,7 @@ function calculateWinner(squares: SquareValue[]) {
 }
 
 function findBestMove(squares: SquareValue[]): number {
+  // Win if possible
   for (let i = 0; i < 9; i++) {
     if (squares[i] === "") {
       const tempBoard = squares.slice();
@@ -58,6 +59,7 @@ function findBestMove(squares: SquareValue[]): number {
     }
   }
 
+  // Block opponent's win
   for (let i = 0; i < 9; i++) {
     if (squares[i] === "") {
       const tempBoard = squares.slice();
@@ -68,19 +70,22 @@ function findBestMove(squares: SquareValue[]): number {
     }
   }
 
+  // Take center
   if (squares[4] === "") return 4;
 
+  // Take a corner
   const corners = [0, 2, 6, 8].filter(i => squares[i] === "");
   if (corners.length > 0) {
     return corners[Math.floor(Math.random() * corners.length)];
   }
 
+  // Take any available space
   const available = squares.map((sq, i) => sq === "" ? i : null).filter(i => i !== null) as number[];
   if (available.length > 0) {
     return available[Math.floor(Math.random() * available.length)];
   }
 
-  return -1;
+  return -1; // Should not happen in a normal game
 }
 
 const initialBoardArray: SquareValue[] = Array(9).fill('');
@@ -114,8 +119,9 @@ export default function Game() {
 
 
   // --- Effects ---
+
+  // Initialize Player ID and handle game joining from URL
   useEffect(() => {
-    // Player ID and URL game ID initialization
     let id = localStorage.getItem('playerId');
     if (!id) {
       id = `player_${Math.random().toString(36).substring(2, 11)}`;
@@ -124,28 +130,21 @@ export default function Game() {
     playerIdRef.current = id;
     setPlayerId(id);
     
-
     const gameIdFromUrl = searchParams.get('game');
     if (gameIdFromUrl) {
         setGameMode('pvp-online');
+        setGameId(gameIdFromUrl);
         setInputGameId(gameIdFromUrl);
         // We need to use a timeout to ensure playerId is set before joining
         setTimeout(() => joinGame(gameIdFromUrl), 50);
+    } else {
+        setGameId(''); // Clear gameId if not in URL
     }
     setIsInitializing(false);
   }, [searchParams]);
 
+  // Online game state listener
   useEffect(() => {
-    // URL management for online games
-    const gameIdFromUrl = searchParams.get('game');
-    if (gameMode === 'pvp-online' && gameId && gameId !== gameIdFromUrl) {
-      router.push(`/?game=${gameId}`, { scroll: false });
-    }
-  }, [gameId, gameMode, searchParams, router]);
-
-
-  useEffect(() => {
-    // Online game state listener
     if (gameMode !== 'pvp-online' || !gameId) {
       if(onlineGameState) setOnlineGameState(null); // Clear previous state
       return;
@@ -153,18 +152,17 @@ export default function Game() {
 
     const gameRef = ref(db, `games/${gameId}`);
     const unsubscribe = onValue(gameRef, (snapshot) => {
-      const data = snapshot.val();
+      const data = snapshot.val() as GameState;
       if (data) {
         let boardArray: SquareValue[] = Array(9).fill('');
         if (data.board && typeof data.board === 'object') {
-           // Convert object to array
            const newBoardArray: SquareValue[] = [];
            for (let i = 0; i < 9; i++) {
                newBoardArray[i] = data.board[i] || "";
            }
            boardArray = newBoardArray;
         }
-        setOnlineGameState({...data, board: data.board});
+        setOnlineGameState(data);
         setBoard(boardArray);
 
         const currentId = playerIdRef.current;
@@ -175,14 +173,15 @@ export default function Game() {
         setOnlineGameState(null);
         toast({ title: "Game not found", description: "The game ID you entered does not exist or has been deleted.", variant: "destructive" });
         setGameId('');
+        router.replace('/', {scroll: false});
       }
     });
 
     return () => unsubscribe();
-  }, [gameId, gameMode, toast]);
+  }, [gameId, gameMode, toast, router]);
 
+  // Computer move logic
   useEffect(() => {
-    // Computer move logic
     if (gameMode === 'pvc' && !xIsNext && !winner && !isDraw) {
       setIsComputerTurn(true);
       const makeComputerMove = () => {
@@ -206,12 +205,13 @@ export default function Game() {
 
   const handleModeChange = (newMode: GameMode) => {
     setGameMode(newMode);
-    handleReset();
+    handleReset(); // Reset local state
     if(newMode !== 'pvp-online') {
       router.replace('/', {scroll: false});
       setGameId('');
       setOnlineGameState(null);
       setPlayerSymbol(null);
+      setInputGameId('');
     }
   }
 
@@ -224,9 +224,11 @@ export default function Game() {
                 winner: null,
                 winningLine: null,
                 isDraw: false,
-                createdAt: serverTimestamp(),
+                // keep players and createdAt
             };
-            set(ref(db, `games/${gameId}`), {...onlineGameState, ...newGameState});
+            // Create a new object for the update
+            const updatedGameState = { ...onlineGameState, ...newGameState };
+            set(ref(db, `games/${gameId}`), updatedGameState);
         }
     } else {
       setBoard(initialBoardArray);
@@ -236,9 +238,9 @@ export default function Game() {
   };
 
   const handleClick = (i: number) => {
-    const currentWinnerInfo = gameMode === 'pvp-online' && onlineGameState ? calculateWinner(Object.values(onlineGameState.board)) : winnerInfo;
-    const currentWinner = currentWinnerInfo?.winner;
     const currentBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board) : board;
+    const currentWinnerInfo = calculateWinner(currentBoard);
+    const currentWinner = currentWinnerInfo?.winner;
     
     if (currentWinner || currentBoard[i] || (gameMode === 'pvc' && !xIsNext) || isComputerTurn) return;
     
@@ -261,7 +263,7 @@ export default function Game() {
         toast({title: "Player ID not found", description: "Could not create game. Please refresh and try again.", variant: "destructive"});
         return;
     }
-    const newGameId = Math.random().toString(36).substring(2, 11);
+    const newGameId = Math.random().toString(36).substring(2, 9);
     const newGameRef = child(ref(db, 'games'), newGameId);
 
     const newGameState: GameState = {
@@ -274,8 +276,8 @@ export default function Game() {
       createdAt: serverTimestamp(),
     };
     set(newGameRef, newGameState).then(() => {
-      setGameId(newGameId);
-      setInputGameId(newGameId);
+      // Navigate to the new game URL, which will trigger the useEffect to join
+      router.push(`/?game=${newGameId}`, { scroll: false });
     }).catch((error) => {
       toast({title: "Error creating game", description: error.message, variant: 'destructive'})
     });
@@ -292,6 +294,13 @@ export default function Game() {
        toast({ title: "Player ID missing", description: "Cannot join game. Please refresh.", variant: "destructive" });
       return;
     }
+    
+    // If we're not already at this game's URL, navigate to it.
+    if (searchParams.get('game') !== idToJoin) {
+        router.push(`/?game=${idToJoin}`, { scroll: false });
+        return;
+    }
+
 
     const gameRef = ref(db, `games/${idToJoin}`);
     onValue(gameRef, (snapshot) => {
@@ -302,7 +311,7 @@ export default function Game() {
             const gameIsFull = gameData.players.X && gameData.players.O;
 
             if(playerIsX || playerIsO){
-                 setGameId(idToJoin);
+                 setGameId(idToJoin); // Already in game or just joined
                  return;
             }
 
@@ -328,7 +337,6 @@ export default function Game() {
     }
     const boardState = onlineGameState.board;
     if (boardState[i]) return;
-
 
     const currentPlayer: Player = onlineGameState.xIsNext ? 'X' : 'O';
     if(playerSymbol !== currentPlayer) {
@@ -383,6 +391,8 @@ export default function Game() {
     let winnerName = `Player ${displayWinner}`;
      if (gameMode === 'pvc') {
         winnerName = displayWinner === 'X' ? "You" : "Computer";
+     } else if (gameMode === 'pvp-online') {
+        winnerName = playerSymbol === displayWinner ? "You" : "Opponent";
      }
     statusMessage = (
       <div className="flex items-center gap-2">
@@ -417,7 +427,7 @@ export default function Game() {
   }
   
   const renderOnlineSetup = () => (
-     <Card className="w-full max-w-md shadow-2xl bg-card">
+     <div className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-4xl font-bold font-headline text-primary text-center">Tic-Tac-Toe Online</CardTitle>
         </CardHeader>
@@ -433,20 +443,20 @@ export default function Game() {
               <Button onClick={() => joinGame()} disabled={!playerId || !inputGameId || isInitializing}>Join Game</Button>
           </div>
         </CardContent>
-     </Card>
+     </div>
   );
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 font-body">
       <Card className="w-full max-w-md shadow-2xl bg-card">
-        <CardHeader className="text-center space-y-4">
-          <CardTitle className="text-4xl font-bold font-headline text-primary">
-            Tic-Tac-Toe
-          </CardTitle>
-        </CardHeader>
         
         {gameMode === 'pvp-online' && !gameId ? renderOnlineSetup() : (
            <>
+              <CardHeader className="text-center space-y-4">
+                <CardTitle className="text-4xl font-bold font-headline text-primary">
+                  Tic-Tac-Toe
+                </CardTitle>
+              </CardHeader>
               <CardContent className="flex flex-col items-center gap-6 pt-2">
                 <div className='flex items-center justify-center gap-4 text-muted-foreground'>
                   <label htmlFor='game-mode-select' className='text-lg'>Game Mode</label>
@@ -480,7 +490,7 @@ export default function Game() {
                     <Button 
                       onClick={handleReset} 
                       size="lg" 
-                      className="animate-pulse mt-4"
+                      className="animate-pulse"
                       disabled={gameMode === 'pvp-online' && playerSymbol !== 'X'}
                     >
                       Play Again

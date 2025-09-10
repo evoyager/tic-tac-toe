@@ -144,6 +144,10 @@ export default function Game() {
         } else if (!gameId && gameIdFromUrl) {
             router.replace('/', {scroll: false});
         }
+    } else {
+        if(searchParams.get('game')) {
+            router.replace('/', {scroll: false});
+        }
     }
   }, [gameId, gameMode, searchParams, router])
 
@@ -264,7 +268,7 @@ export default function Game() {
         toast({title: "Player ID not found", description: "Could not create game. Please refresh and try again.", variant: "destructive"});
         return;
     }
-    const newGameId = Math.random().toString(36).substring(2, 11);
+    const newGameId = Math.random().toString(36).substring(2, 9);
     const newGameRef = child(ref(db, 'games'), newGameId);
 
     const newGameState: GameState = {
@@ -342,7 +346,8 @@ export default function Game() {
 
     const boardAsArrayForWinnerCheck: SquareValue[] = Array(9).fill('');
     Object.keys(newBoardState).forEach(key => {
-        boardAsArrayForWinnerCheck[parseInt(key)] = newBoardState[key];
+        const numericKey = parseInt(key, 10);
+        boardAsArrayForWinnerCheck[numericKey] = newBoardState[numericKey];
     })
     
     const winnerInfo = calculateWinner(boardAsArrayForWinnerCheck);

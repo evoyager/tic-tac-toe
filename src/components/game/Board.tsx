@@ -10,15 +10,17 @@ type BoardProps = {
   squares: SquareValue[];
   onClick: (i: number) => void;
   winningLine: number[] | undefined;
+  disabled?: boolean;
 };
 
-const Board: FC<BoardProps> = ({ squares, onClick, winningLine }) => {
+const Board: FC<BoardProps> = ({ squares, onClick, winningLine, disabled }) => {
   const renderSquare = (i: number) => (
     <Square
       key={i}
       value={squares[i]}
       onClick={() => onClick(i)}
       isWinning={winningLine?.includes(i) || false}
+      disabled={disabled || !!squares[i]}
     />
   );
 

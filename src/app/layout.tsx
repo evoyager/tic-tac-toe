@@ -1,10 +1,11 @@
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
   title: 'Tic-Tac-Toe',
-  description: 'A simple tic-tac-toe game.',
+  description: 'A classic game with a modern twist.',
 };
 
 export default function RootLayout({

@@ -88,7 +88,7 @@ const initialBoardObject: { [key: number]: SquareValue } = {0:"", 1:"", 2:"", 3:
 
 
 // --- Main Game Component ---
-export default function UnifiedGamePage() {
+export default function Game() {
   const [gameMode, setGameMode] = useState<GameMode>('pvc');
   const [board, setBoard] = useState<SquareValue[]>(initialBoardArray);
   const [xIsNext, setXIsNext] = useState(true);
@@ -123,7 +123,7 @@ export default function UnifiedGamePage() {
     }
     playerIdRef.current = id;
     setPlayerId(id);
-    setIsInitializing(false);
+    
 
     const gameIdFromUrl = searchParams.get('game');
     if (gameIdFromUrl) {
@@ -132,12 +132,26 @@ export default function UnifiedGamePage() {
         // We need to use a timeout to ensure playerId is set before joining
         setTimeout(() => joinGame(gameIdFromUrl), 50);
     }
+    setIsInitializing(false);
   }, [searchParams]);
+
+  useEffect(() => {
+    // URL management for online games
+    if(gameMode === 'pvp-online') {
+        const gameIdFromUrl = searchParams.get('game');
+        if(gameId && gameId !== gameIdFromUrl) {
+            router.push(`/?game=${gameId}`, {scroll: false});
+        } else if (!gameId && gameIdFromUrl) {
+            router.replace('/', {scroll: false});
+        }
+    }
+  }, [gameId, gameMode, searchParams, router])
+
 
   useEffect(() => {
     // Online game state listener
     if (gameMode !== 'pvp-online' || !gameId) {
-      setOnlineGameState(null);
+      if(onlineGameState) setOnlineGameState(null); // Clear previous state
       return;
     };
 
@@ -163,14 +177,13 @@ export default function UnifiedGamePage() {
 
       } else {
         setOnlineGameState(null);
-        toast({ title: "Game not found", description: "The game ID you entered does not exist.", variant: "destructive" });
+        toast({ title: "Game not found", description: "The game ID you entered does not exist or has been deleted.", variant: "destructive" });
         setGameId('');
-        router.replace('/', {scroll: false}); // Clear URL param
       }
     });
 
     return () => unsubscribe();
-  }, [gameId, gameMode, toast, router]);
+  }, [gameId, gameMode, toast]);
 
   useEffect(() => {
     // Computer move logic
@@ -202,7 +215,6 @@ export default function UnifiedGamePage() {
       setGameId('');
       setOnlineGameState(null);
       setPlayerSymbol(null);
-      router.replace('/', {scroll: false}); // Clear URL param
     }
   }
 
@@ -227,13 +239,14 @@ export default function UnifiedGamePage() {
   };
 
   const handleClick = (i: number) => {
-    const currentWinnerInfo = gameMode === 'pvp-online' ? (onlineGameState ? calculateWinner(Object.values(onlineGameState.board)) : null) : winnerInfo;
+    const currentWinnerInfo = gameMode === 'pvp-online' && onlineGameState ? calculateWinner(Object.values(onlineGameState.board)) : winnerInfo;
     const currentWinner = currentWinnerInfo?.winner;
     const currentBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board) : board;
-
+    
     if (currentWinner || currentBoard[i] || (gameMode === 'pvc' && !xIsNext) || isComputerTurn) return;
     
     if (gameMode === 'pvp-online') {
+      if (!onlineGameState) return;
       handleOnlineClick(i);
     } else {
       const newBoard = board.slice();
@@ -251,7 +264,7 @@ export default function UnifiedGamePage() {
         toast({title: "Player ID not found", description: "Could not create game. Please refresh and try again.", variant: "destructive"});
         return;
     }
-    const newGameId = Math.random().toString(36).substring(2, 9);
+    const newGameId = Math.random().toString(36).substring(2, 11);
     const newGameRef = child(ref(db, 'games'), newGameId);
 
     const newGameState: GameState = {
@@ -265,9 +278,6 @@ export default function UnifiedGamePage() {
     };
     set(newGameRef, newGameState).then(() => {
       setGameId(newGameId);
-      if(searchParams.get('game') !== newGameId){
-        router.push(`/?game=${newGameId}`, {scroll: false});
-      }
     }).catch((error) => {
       toast({title: "Error creating game", description: error.message, variant: 'destructive'})
     });
@@ -295,9 +305,6 @@ export default function UnifiedGamePage() {
 
             if(playerIsX || playerIsO){
                  setGameId(idToJoin);
-                 if (searchParams.get('game') !== idToJoin) {
-                    router.push(`/?game=${idToJoin}`, {scroll: false});
-                 }
                  return;
             }
 
@@ -309,9 +316,6 @@ export default function UnifiedGamePage() {
              if (!gameData.players.O) {
                 set(ref(db, `games/${idToJoin}/players/O`), currentId).then(() => {
                   setGameId(idToJoin);
-                  if (searchParams.get('game') !== idToJoin) {
-                     router.push(`/?game=${idToJoin}`, {scroll: false});
-                  }
                 });
             }
         } else {
@@ -333,14 +337,19 @@ export default function UnifiedGamePage() {
       toast({ title: "Not your turn!", description: "Wait for the other player to move."});
       return;
     }
+    
+    const newBoardState = { ...boardState, [i]: currentPlayer };
 
-    const newBoard = {...boardState, [i]: currentPlayer};
-    const boardAsArray = Object.values(newBoard);
-    const winnerInfo = calculateWinner(boardAsArray);
-    const isDraw = !winnerInfo && boardAsArray.every(square => square !== "");
+    const boardAsArrayForWinnerCheck: SquareValue[] = Array(9).fill('');
+    Object.keys(newBoardState).forEach(key => {
+        boardAsArrayForWinnerCheck[parseInt(key)] = newBoardState[key];
+    })
+    
+    const winnerInfo = calculateWinner(boardAsArrayForWinnerCheck);
+    const isDraw = !winnerInfo && Object.values(newBoardState).filter(v => v).length === 9;
 
     const nextGameState: Partial<GameState> = {
-      board: newBoard,
+      board: newBoardState,
       xIsNext: !onlineGameState.xIsNext,
       winner: winnerInfo?.winner || null,
       winningLine: winnerInfo?.line || null,
@@ -355,20 +364,14 @@ export default function UnifiedGamePage() {
     setOnlineGameState(null);
     setPlayerSymbol(null);
     setInputGameId('');
-    router.replace('/', {scroll: false}); // Clear URL param
     handleReset();
   }
 
   // --- Render Logic ---
-  
-  const onlineWinner = onlineGameState?.winner;
-  const onlineIsDraw = onlineGameState?.isDraw;
-  const onlineXIsNext = onlineGameState?.xIsNext;
-  
   const displayWinnerInfo = gameMode === 'pvp-online' && onlineGameState ? calculateWinner(Object.values(onlineGameState.board)) : winnerInfo;
   const displayWinner = displayWinnerInfo?.winner;
-  const displayIsDraw = gameMode === 'pvp-online' ? onlineIsDraw : isDraw;
-  const displayXIsNext = gameMode === 'pvp-online' ? onlineXIsNext : xIsNext;
+  const displayIsDraw = gameMode === 'pvp-online' ? onlineGameState?.isDraw : isDraw;
+  const displayXIsNext = gameMode === 'pvp-online' ? onlineGameState?.xIsNext : xIsNext;
   const displayBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board) : board;
   const displayWinningLine = displayWinnerInfo?.line;
 
@@ -440,30 +443,30 @@ export default function UnifiedGamePage() {
           <CardTitle className="text-4xl font-bold font-headline text-primary">
             Tic-Tac-Toe
           </CardTitle>
-          <div className='flex items-center justify-center gap-4 text-muted-foreground'>
-            <label htmlFor='game-mode-select' className='text-lg'>Game Mode</label>
-            <Select onValueChange={(value: GameMode) => handleModeChange(value)} value={gameMode}>
-              <SelectTrigger className="w-[200px]" id="game-mode-select">
-                <SelectValue placeholder="Select a game mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pvc">Player vs Computer</SelectItem>
-                <SelectItem value="pvp-local">Player vs Player</SelectItem>
-                <SelectItem value="pvp-online">Player vs Player (Online)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </CardHeader>
         
         {gameMode === 'pvp-online' && !gameId ? renderOnlineSetup() : (
            <>
-              <CardContent className="flex flex-col items-center gap-6 pt-6">
+              <CardContent className="flex flex-col items-center gap-6 pt-2">
+                <div className='flex items-center justify-center gap-4 text-muted-foreground'>
+                  <label htmlFor='game-mode-select' className='text-lg'>Game Mode</label>
+                  <Select onValueChange={(value: GameMode) => handleModeChange(value)} value={gameMode}>
+                    <SelectTrigger className="w-[200px]" id="game-mode-select">
+                      <SelectValue placeholder="Select a game mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pvc">Player vs Computer</SelectItem>
+                      <SelectItem value="pvp-local">Player vs Player</SelectItem>
+                      <SelectItem value="pvp-online">Player vs Player (Online)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex h-10 items-center justify-center text-xl">{statusMessage}</div>
                 <Board
                   squares={displayBoard}
                   onClick={handleClick}
                   winningLine={displayWinningLine || undefined}
-                  disabled={isComputerTurn || (gameMode === 'pvp-online' && (playerSymbol !== (onlineXIsNext ? 'X' : 'O') || !!onlineWinner)) }
+                  disabled={isComputerTurn || (gameMode === 'pvp-online' && (playerSymbol !== (displayXIsNext ? 'X' : 'O') || !!displayWinner)) }
                 />
                  {gameMode === 'pvp-online' && gameId && (
                     <div className='text-center'>
@@ -477,7 +480,7 @@ export default function UnifiedGamePage() {
                     <Button 
                       onClick={handleReset} 
                       size="lg" 
-                      className="animate-pulse"
+                      className="animate-pulse mt-4"
                       disabled={gameMode === 'pvp-online' && playerSymbol !== 'X'}
                     >
                       Play Again

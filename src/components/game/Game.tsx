@@ -137,19 +137,11 @@ export default function Game() {
 
   useEffect(() => {
     // URL management for online games
-    if(gameMode === 'pvp-online') {
-        const gameIdFromUrl = searchParams.get('game');
-        if(gameId && gameId !== gameIdFromUrl) {
-            router.push(`/?game=${gameId}`, {scroll: false});
-        } else if (!gameId && gameIdFromUrl) {
-            router.replace('/', {scroll: false});
-        }
-    } else {
-        if(searchParams.get('game')) {
-            router.replace('/', {scroll: false});
-        }
+    const gameIdFromUrl = searchParams.get('game');
+    if (gameMode === 'pvp-online' && gameId && gameId !== gameIdFromUrl) {
+      router.push(`/?game=${gameId}`, { scroll: false });
     }
-  }, [gameId, gameMode, searchParams, router])
+  }, [gameId, gameMode, searchParams, router]);
 
 
   useEffect(() => {
@@ -216,6 +208,7 @@ export default function Game() {
     setGameMode(newMode);
     handleReset();
     if(newMode !== 'pvp-online') {
+      router.replace('/', {scroll: false});
       setGameId('');
       setOnlineGameState(null);
       setPlayerSymbol(null);
@@ -268,7 +261,7 @@ export default function Game() {
         toast({title: "Player ID not found", description: "Could not create game. Please refresh and try again.", variant: "destructive"});
         return;
     }
-    const newGameId = Math.random().toString(36).substring(2, 9);
+    const newGameId = Math.random().toString(36).substring(2, 11);
     const newGameRef = child(ref(db, 'games'), newGameId);
 
     const newGameState: GameState = {
@@ -282,6 +275,7 @@ export default function Game() {
     };
     set(newGameRef, newGameState).then(() => {
       setGameId(newGameId);
+      setInputGameId(newGameId);
     }).catch((error) => {
       toast({title: "Error creating game", description: error.message, variant: 'destructive'})
     });
@@ -347,7 +341,7 @@ export default function Game() {
     const boardAsArrayForWinnerCheck: SquareValue[] = Array(9).fill('');
     Object.keys(newBoardState).forEach(key => {
         const numericKey = parseInt(key, 10);
-        boardAsArrayForWinnerCheck[numericKey] = newBoardState[numericKey];
+        boardAsArrayForWinnerCheck[numericKey] = newBoardState[numericKey as keyof typeof newBoardState];
     })
     
     const winnerInfo = calculateWinner(boardAsArrayForWinnerCheck);
@@ -365,6 +359,7 @@ export default function Game() {
   };
 
   const handleLeaveGame = () => {
+    router.replace('/', {scroll: false});
     setGameId('');
     setOnlineGameState(null);
     setPlayerSymbol(null);

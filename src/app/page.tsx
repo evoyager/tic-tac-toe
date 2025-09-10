@@ -18,7 +18,7 @@ type SquareValue = Player | "" | null;
 type GameMode = 'pvc' | 'pvp-local' | 'pvp-online';
 
 interface GameState {
-  board: { [key: number]: SquareValue } | SquareValue[];
+  board: { [key: number]: SquareValue };
   xIsNext: boolean;
   winner: Player | null;
   winningLine: number[] | null;
@@ -118,8 +118,7 @@ export default function UnifiedGamePage() {
     // Player ID and URL game ID initialization
     let id = localStorage.getItem('playerId');
     if (!id) {
-      const playerRef = push(ref(db, 'players'));
-      id = playerRef.key;
+      id = `player_${Math.random().toString(36).substring(2, 11)}`;
       if (id) localStorage.setItem('playerId', id);
     }
     playerIdRef.current = id;
@@ -148,11 +147,12 @@ export default function UnifiedGamePage() {
       if (data) {
         let boardArray: SquareValue[] = Array(9).fill('');
         if (data.board && typeof data.board === 'object') {
-           for (const key in data.board) {
-             boardArray[parseInt(key)] = data.board[key];
+           // Convert object to array
+           const newBoardArray: SquareValue[] = [];
+           for (let i = 0; i < 9; i++) {
+               newBoardArray[i] = data.board[i] || "";
            }
-        } else if (Array.isArray(data.board)) {
-            boardArray = data.board;
+           boardArray = newBoardArray;
         }
         data.board = boardArray;
         setOnlineGameState(data);
@@ -178,9 +178,10 @@ export default function UnifiedGamePage() {
     if (gameMode === 'pvc' && !xIsNext && !winner && !isDraw) {
       setIsComputerTurn(true);
       const makeComputerMove = () => {
-        const move = findBestMove(board);
-        if (move !== -1 && board[move] === '') {
-            const newBoard = board.slice();
+        const currentBoard = board;
+        const move = findBestMove(currentBoard);
+        if (move !== -1 && currentBoard[move] === '') {
+            const newBoard = currentBoard.slice();
             newBoard[move] = 'O';
             setBoard(newBoard);
             setXIsNext(true);
@@ -208,8 +209,8 @@ export default function UnifiedGamePage() {
 
   const handleReset = () => {
     if (gameMode === 'pvp-online' && gameId && onlineGameState) {
-        if(playerSymbol === 'X') {
-            const newGameState = {
+        if(playerSymbol === 'X') { // Only player X can restart
+            const newGameState: GameState = {
                 ...onlineGameState,
                 board: initialBoardObject,
                 xIsNext: true,
@@ -292,7 +293,6 @@ export default function UnifiedGamePage() {
             const gameIsFull = gameData.players.X && gameData.players.O;
 
             if(playerIsX || playerIsO){
-                 // Player is already in the game, just set the local state
                  setGameId(idToJoin);
                  if (router.asPath !== `/?game=${idToJoin}`) {
                     router.push(`/?game=${idToJoin}`, {scroll: false});
@@ -305,7 +305,6 @@ export default function UnifiedGamePage() {
                 return;
             }
             
-            // If we are here, game is not full and player is not in it. Join as O.
              if (!gameData.players.O) {
                 set(ref(db, `games/${idToJoin}/players/O`), currentId).then(() => {
                   setGameId(idToJoin);

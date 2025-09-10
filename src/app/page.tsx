@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import Board from '@/components/game/Board';
 import { IconO, IconX } from '@/components/game/GameIcons';
 import { Bot } from 'lucide-react';
-import { ref, onValue, set, push, serverTimestamp, child } from 'firebase/database';
+import { ref, onValue, set, serverTimestamp, child } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -83,8 +83,8 @@ function findBestMove(squares: SquareValue[]): number {
   return -1;
 }
 
-const initialBoardArray = Array(9).fill('');
-const initialBoardObject = {0:"", 1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:""};
+const initialBoardArray: SquareValue[] = Array(9).fill('');
+const initialBoardObject: { [key: number]: SquareValue } = {0:"", 1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:""};
 
 
 // --- Main Game Component ---

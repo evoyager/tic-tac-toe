@@ -119,7 +119,7 @@ export default function UnifiedGamePage() {
     let id = localStorage.getItem('playerId');
     if (!id) {
       id = `player_${Math.random().toString(36).substring(2, 11)}`;
-      if (id) localStorage.setItem('playerId', id);
+      localStorage.setItem('playerId', id);
     }
     playerIdRef.current = id;
     setPlayerId(id);
@@ -154,8 +154,7 @@ export default function UnifiedGamePage() {
            }
            boardArray = newBoardArray;
         }
-        data.board = boardArray;
-        setOnlineGameState(data as GameState);
+        setOnlineGameState({...data, board: data.board});
         setBoard(boardArray);
 
         const currentId = playerIdRef.current;
@@ -228,8 +227,9 @@ export default function UnifiedGamePage() {
   };
 
   const handleClick = (i: number) => {
-    const currentWinner = gameMode === 'pvp-online' ? onlineGameState?.winner : winner;
-    const currentBoard = gameMode === 'pvp-online' && onlineGameState ? (Array.isArray(onlineGameState.board) ? onlineGameState.board : Object.values(onlineGameState.board)) : board;
+    const currentWinnerInfo = gameMode === 'pvp-online' ? (onlineGameState ? calculateWinner(Object.values(onlineGameState.board)) : null) : winnerInfo;
+    const currentWinner = currentWinnerInfo?.winner;
+    const currentBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board) : board;
 
     if (currentWinner || currentBoard[i] || (gameMode === 'pvc' && !xIsNext) || isComputerTurn) return;
     
@@ -251,7 +251,7 @@ export default function UnifiedGamePage() {
         toast({title: "Player ID not found", description: "Could not create game. Please refresh and try again.", variant: "destructive"});
         return;
     }
-    const newGameId = Math.random().toString(36).substring(2, 11);
+    const newGameId = Math.random().toString(36).substring(2, 9);
     const newGameRef = child(ref(db, 'games'), newGameId);
 
     const newGameState: GameState = {
@@ -265,7 +265,9 @@ export default function UnifiedGamePage() {
     };
     set(newGameRef, newGameState).then(() => {
       setGameId(newGameId);
-      router.push(`/?game=${newGameId}`, {scroll: false});
+      if(searchParams.get('game') !== newGameId){
+        router.push(`/?game=${newGameId}`, {scroll: false});
+      }
     }).catch((error) => {
       toast({title: "Error creating game", description: error.message, variant: 'destructive'})
     });
@@ -322,9 +324,7 @@ export default function UnifiedGamePage() {
     if (!onlineGameState || !onlineGameState.board || onlineGameState.winner || onlineGameState.isDraw) {
       return;
     }
-    // Ensure board is an object before checking the square
     const boardState = onlineGameState.board;
-    if (typeof boardState !== 'object' || boardState === null || Array.isArray(boardState)) return;
     if (boardState[i]) return;
 
 
@@ -334,26 +334,20 @@ export default function UnifiedGamePage() {
       return;
     }
 
-    const boardAsArray = Object.values(boardState);
-    if(boardAsArray[i] !== '') return;
-
-
-    boardAsArray[i] = currentPlayer;
+    const newBoard = {...boardState, [i]: currentPlayer};
+    const boardAsArray = Object.values(newBoard);
     const winnerInfo = calculateWinner(boardAsArray);
     const isDraw = !winnerInfo && boardAsArray.every(square => square !== "");
 
-    const boardObject: {[key: number]: SquareValue} = {};
-    boardAsArray.forEach((val, idx) => { boardObject[idx] = val; });
-
     const nextGameState: Partial<GameState> = {
-      board: boardObject,
+      board: newBoard,
       xIsNext: !onlineGameState.xIsNext,
       winner: winnerInfo?.winner || null,
       winningLine: winnerInfo?.line || null,
       isDraw: isDraw,
     };
     
-    set(ref(db, `games/${gameId}`), {...onlineGameState, ...nextGameState, board: boardObject});
+    set(ref(db, `games/${gameId}`), {...onlineGameState, ...nextGameState});
   };
 
   const handleLeaveGame = () => {
@@ -367,18 +361,19 @@ export default function UnifiedGamePage() {
 
   // --- Render Logic ---
   
-  let statusMessage;
   const onlineWinner = onlineGameState?.winner;
   const onlineIsDraw = onlineGameState?.isDraw;
   const onlineXIsNext = onlineGameState?.xIsNext;
   
-  const displayWinner = gameMode === 'pvp-online' ? onlineWinner : winner;
+  const displayWinnerInfo = gameMode === 'pvp-online' && onlineGameState ? calculateWinner(Object.values(onlineGameState.board)) : winnerInfo;
+  const displayWinner = displayWinnerInfo?.winner;
   const displayIsDraw = gameMode === 'pvp-online' ? onlineIsDraw : isDraw;
   const displayXIsNext = gameMode === 'pvp-online' ? onlineXIsNext : xIsNext;
-  const displayBoard = gameMode === 'pvp-online' && onlineGameState ? (Array.isArray(onlineGameState.board) ? onlineGameState.board : Object.values(onlineGameState.board)) : board;
-  const displayWinningLine = gameMode === 'pvp-online' ? onlineGameState?.winningLine : winningLine;
+  const displayBoard = gameMode === 'pvp-online' && onlineGameState ? Object.values(onlineGameState.board) : board;
+  const displayWinningLine = displayWinnerInfo?.line;
 
 
+  let statusMessage;
   if (displayWinner) {
     const WinnerIcon = displayWinner === 'X' ? IconX : IconO;
     const winnerColor = displayWinner === 'X' ? 'text-primary' : 'text-destructive';
@@ -468,7 +463,7 @@ export default function UnifiedGamePage() {
                   squares={displayBoard}
                   onClick={handleClick}
                   winningLine={displayWinningLine || undefined}
-                  disabled={isComputerTurn || (gameMode === 'pvp-online' && playerSymbol !== (onlineXIsNext ? 'X' : 'O'))}
+                  disabled={isComputerTurn || (gameMode === 'pvp-online' && (playerSymbol !== (onlineXIsNext ? 'X' : 'O') || !!onlineWinner)) }
                 />
                  {gameMode === 'pvp-online' && gameId && (
                     <div className='text-center'>

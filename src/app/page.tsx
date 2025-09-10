@@ -155,7 +155,7 @@ export default function UnifiedGamePage() {
            boardArray = newBoardArray;
         }
         data.board = boardArray;
-        setOnlineGameState(data);
+        setOnlineGameState(data as GameState);
         setBoard(boardArray);
 
         const currentId = playerIdRef.current;
@@ -210,8 +210,7 @@ export default function UnifiedGamePage() {
   const handleReset = () => {
     if (gameMode === 'pvp-online' && gameId && onlineGameState) {
         if(playerSymbol === 'X') { // Only player X can restart
-            const newGameState: GameState = {
-                ...onlineGameState,
+            const newGameState: Partial<GameState> = {
                 board: initialBoardObject,
                 xIsNext: true,
                 winner: null,
@@ -219,7 +218,7 @@ export default function UnifiedGamePage() {
                 isDraw: false,
                 createdAt: serverTimestamp(),
             };
-            set(ref(db, `games/${gameId}`), newGameState);
+            set(ref(db, `games/${gameId}`), {...onlineGameState, ...newGameState});
         }
     } else {
       setBoard(initialBoardArray);
@@ -294,7 +293,7 @@ export default function UnifiedGamePage() {
 
             if(playerIsX || playerIsO){
                  setGameId(idToJoin);
-                 if (router.asPath !== `/?game=${idToJoin}`) {
+                 if (searchParams.get('game') !== idToJoin) {
                     router.push(`/?game=${idToJoin}`, {scroll: false});
                  }
                  return;
@@ -308,7 +307,7 @@ export default function UnifiedGamePage() {
              if (!gameData.players.O) {
                 set(ref(db, `games/${idToJoin}/players/O`), currentId).then(() => {
                   setGameId(idToJoin);
-                  if (router.asPath !== `/?game=${idToJoin}`) {
+                  if (searchParams.get('game') !== idToJoin) {
                      router.push(`/?game=${idToJoin}`, {scroll: false});
                   }
                 });
@@ -320,16 +319,22 @@ export default function UnifiedGamePage() {
   };
   
   const handleOnlineClick = (i: number) => {
-    if (!onlineGameState || !onlineGameState.board || onlineGameState.winner || onlineGameState.board[i] || onlineGameState.isDraw) {
+    if (!onlineGameState || !onlineGameState.board || onlineGameState.winner || onlineGameState.isDraw) {
       return;
     }
+    // Ensure board is an object before checking the square
+    const boardState = onlineGameState.board;
+    if (typeof boardState !== 'object' || boardState === null || Array.isArray(boardState)) return;
+    if (boardState[i]) return;
+
+
     const currentPlayer: Player = onlineGameState.xIsNext ? 'X' : 'O';
     if(playerSymbol !== currentPlayer) {
       toast({ title: "Not your turn!", description: "Wait for the other player to move."});
       return;
     }
 
-    const boardAsArray = Array.isArray(onlineGameState.board) ? onlineGameState.board.slice() : Object.values(onlineGameState.board);
+    const boardAsArray = Object.values(boardState);
     if(boardAsArray[i] !== '') return;
 
 

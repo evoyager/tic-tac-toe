@@ -11,15 +11,16 @@ type SquareProps = {
   value: SquareValue;
   onClick: () => void;
   isWinning: boolean;
+  disabled?: boolean;
 };
 
-const Square: FC<SquareProps> = ({ value, onClick, isWinning }) => {
+const Square: FC<SquareProps> = ({ value, onClick, isWinning, disabled }) => {
   const PlayerIcon = value === 'X' ? IconX : IconO;
 
   return (
     <button
       onClick={onClick}
-      disabled={!!value}
+      disabled={disabled || !!value}
       className={cn(
         'flex h-24 w-24 items-center justify-center rounded-lg border-2 shadow-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 md:h-28 md:w-28',
         isWinning
